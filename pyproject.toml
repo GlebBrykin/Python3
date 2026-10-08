@@ -20,3 +20,7 @@ exclude = [".venv", "dist", "__pycache__", "data", "logs"]
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = ["E501"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
