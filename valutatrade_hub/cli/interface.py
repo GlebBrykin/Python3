@@ -1,8 +1,10 @@
 import argparse
 import logging
+import shlex
+import sys
 
 from ..core import usecases
-from ..core.exceptions import ApiRequestError, CurrencyNotFoundError, InsufficientFundsError
+from ..core.exceptions import ApiRequestError, CurrencyNotFoundError, InsufficientFundsError  # noqa 501
 from ..infra.database import DatabaseManager
 from ..logging_config import setup_logging
 from ..parser_service.updater import RatesUpdater
@@ -10,39 +12,47 @@ from ..parser_service.updater import RatesUpdater
 logger = logging.getLogger("valutatrade")
 db = DatabaseManager()
 
-
 class CLI:
     def __init__(self):
         self.current_user = None
+        self.parser = self._create_parser()
 
-    def run(self):
-        parser = argparse.ArgumentParser(description="ValutaTrade Hub CLI")
+    def _create_parser(self):
+        parser = argparse.ArgumentParser(description="ValutaTrade Hub CLI", add_help=False) # noqa 501
         subparsers = parser.add_subparsers(dest="command")
+        
         reg_p = subparsers.add_parser("register")
         reg_p.add_argument("--username", required=True)
         reg_p.add_argument("--password", required=True)
+        
         log_p = subparsers.add_parser("login")
         log_p.add_argument("--username", required=True)
         log_p.add_argument("--password", required=True)
+        
         sp_p = subparsers.add_parser("show-portfolio")
         sp_p.add_argument("--base", default="USD")
+        
         buy_p = subparsers.add_parser("buy")
         buy_p.add_argument("--currency", required=True)
         buy_p.add_argument("--amount", type=float, required=True)
+        
         sell_p = subparsers.add_parser("sell")
         sell_p.add_argument("--currency", required=True)
         sell_p.add_argument("--amount", type=float, required=True)
+        
         gr_p = subparsers.add_parser("get-rate")
         gr_p.add_argument("--from", dest="from_curr", required=True)
         gr_p.add_argument("--to", dest="to_curr", required=True)
+        
         ur_p = subparsers.add_parser("update-rates")
         ur_p.add_argument("--source", default="all")
+        
         sr_p = subparsers.add_parser("show-rates")
         sr_p.add_argument("--currency", default=None)
-        args = parser.parse_args()
-        if not args.command:
-            parser.print_help()
-            return
+        
+        return parser
+
+    def execute(self, args):
         try:
             if args.command == "register":
                 user = usecases.register_user(args.username, args.password)
@@ -77,23 +87,19 @@ class CLI:
                     print("Сначала выполните login")
                     return
                 new_bal, rate = usecases.buy_currency(self.current_user.user_id, args.currency, args.amount)
-                print(
-                    f"Покупка выполнена: {args.amount:.4f} {args.currency.upper()} по курсу {rate} USD/{args.currency.upper()}"
-                )
+                print(f"Покупка выполнена: {args.amount:.4f} {args.currency.upper()} по курсу {rate} USD/{args.currency.upper()}")
                 print(f"Новый баланс: {new_bal:.4f} {args.currency.upper()}")
             elif args.command == "sell":
                 if not self.current_user:
                     print("Сначала выполните login")
                     return
                 new_bal, rate = usecases.sell_currency(self.current_user.user_id, args.currency, args.amount)
-                print(
-                    f"Продажа выполнена: {args.amount:.4f} {args.currency.upper()} по курсу {rate} USD/{args.currency.upper()}"
-                )
+                print(f"Продажа выполнена: {args.amount:.4f} {args.currency.upper()} по курсу {rate} USD/{args.currency.upper()}")
                 print(f"Новый баланс: {new_bal:.4f} {args.currency.upper()}")
             elif args.command == "get-rate":
                 rate, updated = usecases.get_rate(args.from_curr, args.to_curr)
                 print(f"Курс {args.from_curr}→{args.to_curr}: {rate:.8f} (обновлено: {updated})")
-                print(f"Обратный курс {args.to_curr}→{args.from_curr}: {1 / rate:.8f}")
+                print(f"Обратный курс {args.to_curr}→{args.from_curr}: {1/rate:.8f}")
             elif args.command == "update-rates":
                 updater = RatesUpdater()
                 count = updater.run_update(args.source)
@@ -106,9 +112,11 @@ class CLI:
                     return
                 print(f"Rates from cache (updated at {rates_data.get('last_refresh', 'N/A')}):")
                 for pair, info in pairs.items():
-                    if args.currency and args.currency.upper() not in pair:
+                    if args.currency and args.currency.upper() not in pair: 
                         continue
                     print(f"- {pair}: {info['rate']}")
+            else:
+                print("Неизвестная команда. Попробуйте 'help'.")
         except InsufficientFundsError as e:
             print(e)
         except CurrencyNotFoundError as e:
@@ -117,12 +125,36 @@ class CLI:
             print(f"Ошибка API: {e}")
         except ValueError as e:
             print(f"Ошибка валидации: {e}")
-        except Exception as e:
+        except Exception as e: 
             logger.exception("Unexpected error")
             print(f"Непредвиденная ошибка: {e}")
 
+    def run_interactive(self):
+        print("*** ValutaTrade Hub ***")
+        print("Введите команду (или 'exit' для выхода):")
+        while True:
+            try:
+                cmd_line = input("> ")
+                if not cmd_line.strip():
+                    continue
+                if cmd_line.strip().lower() in ("exit", "quit"):
+                    break
+                try:
+                    args = self.parser.parse_args(shlex.split(cmd_line))
+                    self.execute(args)
+                except SystemExit:
+                    pass 
+            except (KeyboardInterrupt, EOFError):
+                break
 
 def main():
     setup_logging()
     cli = CLI()
-    cli.run()
+    if len(sys.argv) > 1:
+        try:
+            args = cli.parser.parse_args(sys.argv[1:])
+            cli.execute(args)
+        except SystemExit:
+            pass
+    else:
+        cli.run_interactive()
