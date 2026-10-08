@@ -9,8 +9,8 @@ dependencies = ["prettytable>=3.10.0", "requests>=2.31.0"]
 [project.scripts]
 valutatrade = "valutatrade_hub.cli.interface:main"
 
-[tool.uv]
-dev-dependencies = ["ruff>=0.6.0"]
+[dependency-groups]
+dev = ["ruff>=0.6.0"]
 
 [tool.ruff]
 line-length = 120
