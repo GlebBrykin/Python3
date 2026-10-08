@@ -54,8 +54,8 @@ class ExchangeRateApiClient(BaseApiClient):
                 raise ApiRequestError(f"ExchangeRate-API error: {data.get('error-type', 'unknown')}")
             result = {}
             for code in self.config.FIAT_CURRENCIES:
-                if code in data["rates"]:
-                    rate_usd_to_fiat = data["rates"][code]
+                if code in data["conversion_rates"]:
+                    rate_usd_to_fiat = data["conversion_rates"][code]
                     if rate_usd_to_fiat > 0:
                         rate_fiat_to_usd = 1.0 / rate_usd_to_fiat
                         pair = f"{code}_{self.config.BASE_CURRENCY}"
